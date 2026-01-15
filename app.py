@@ -63,6 +63,12 @@ AHU_STATE_FILE = BMS_DATA_DIR / "NAEAZ-01-FCB-2_AHUAZ-1_AHU-STATE_20250926_0000_
 OCCUPANCY_FILE = BMS_DATA_DIR / "auditorium_occupancy_20250926_0000_20251212_2359.csv"
 OA_CFM_FILE = BMS_DATA_DIR / "NAEAZ-01-FCB-2_AHUAZ-1_OA-CFM_20250926_0000_20251212_2359.csv"
 
+# Business Hours & Utility Rate
+BUSINESS_HOURS_START = 8   # 8 AM
+BUSINESS_HOURS_END = 18    # 6 PM
+BUSINESS_DAYS = [0, 1, 2, 3, 4]  # Monday=0 through Friday=4
+ELECTRICITY_RATE = 0.17    # $/kWh
+
 # System Health Constants
 OCCUPIED_HOURS_START = 8  # 8 AM
 OCCUPIED_HOURS_END = 18   # 6 PM
@@ -482,42 +488,53 @@ def create_savings_trend_with_anomalies(daily_df: pd.DataFrame) -> go.Figure:
 
     df = daily_df.copy()
 
-    # Calculate baseline and identify anomalies
+    # Calculate baseline
     good_days = df[df['avg_savings_pct'] >= 24]
     baseline = good_days['avg_savings_pct'].median() if len(good_days) > 0 else 27.0
-    threshold = baseline - 10
 
-    df['is_anomaly'] = df['avg_savings_pct'] < threshold
+    # Categorize days: on_track (within 3%), warning (3-10% below), critical (>10% below)
+    df['status'] = df['avg_savings_pct'].apply(lambda x: get_savings_status(x, baseline))
 
     fig = go.Figure()
 
-    # Normal days
-    normal = df[~df['is_anomaly']]
+    # On-track days (green line)
+    on_track = df[df['status'] == 'on_track']
     fig.add_trace(go.Scatter(
-        x=normal['date'],
-        y=normal['avg_savings_pct'],
+        x=on_track['date'],
+        y=on_track['avg_savings_pct'],
         mode='lines+markers',
-        name='Normal',
+        name='On Track',
         line=dict(color='#2ecc71'),
         marker=dict(size=6),
     ))
 
-    # Anomaly days
-    anomalies = df[df['is_anomaly']]
-    if not anomalies.empty:
+    # Warning days (orange markers)
+    warning = df[df['status'] == 'warning']
+    if not warning.empty:
         fig.add_trace(go.Scatter(
-            x=anomalies['date'],
-            y=anomalies['avg_savings_pct'],
+            x=warning['date'],
+            y=warning['avg_savings_pct'],
             mode='markers',
             name='Below Target',
-            marker=dict(color='#e74c3c', size=10, symbol='x'),
+            marker=dict(color='#f39c12', size=10, symbol='diamond'),
+        ))
+
+    # Critical days (red X markers)
+    critical = df[df['status'] == 'critical']
+    if not critical.empty:
+        fig.add_trace(go.Scatter(
+            x=critical['date'],
+            y=critical['avg_savings_pct'],
+            mode='markers',
+            name='Critical',
+            marker=dict(color='#e74c3c', size=12, symbol='x'),
         ))
 
     # Add baseline reference
     fig.add_hline(y=baseline, line_dash="dash", line_color="gray",
                   annotation_text=f"Target: {baseline:.0f}%")
-    fig.add_hline(y=threshold, line_dash="dot", line_color="#e74c3c",
-                  annotation_text=f"Alert: {threshold:.0f}%", opacity=0.5)
+    fig.add_hline(y=baseline - 10, line_dash="dot", line_color="#e74c3c",
+                  annotation_text=f"Alert: {baseline - 10:.0f}%", opacity=0.5)
 
     fig.update_layout(
         title='Savings Trend with Anomalies Highlighted',
@@ -643,38 +660,44 @@ def create_damper_vs_occupancy_chart(merged_df: pd.DataFrame, days: int = 7) -> 
         secondary_y=False,
     )
 
-    # Show problem areas with red/orange bars at the bottom instead of fill
-    # This clearly highlights WHEN there's a problem without messy fills
-    df['too_high'] = (df['gap'] > 15).astype(int) * 5  # Small bars at bottom
-    df['too_low'] = (df['gap'] < -15).astype(int) * 5
+    # Fill the gap between actual and expected damper to show wasted energy
+    # Only show when damper is too high (wasting energy by bringing in too much outdoor air)
 
-    # Red bar at bottom when damper too high (wasted energy)
-    if df['too_high'].sum() > 0:
-        fig.add_trace(
-            go.Bar(
-                x=df['time'], y=df['too_high'],
-                name='Wasted Energy',
-                marker_color='rgba(231, 76, 60, 0.7)',
-                hovertemplate="Damper too high (+%{customdata:.0f}%)<extra></extra>",
-                customdata=df['gap'].clip(lower=0),
-                width=3600000,  # 1 hour in ms
-            ),
-            secondary_y=False,
-        )
+    # First, add the expected damper as the base for the fill (invisible, just for fill reference)
+    fig.add_trace(
+        go.Scatter(
+            x=df['time'], y=df['expected_damper'],
+            name='_expected_base',
+            line=dict(color='rgba(0,0,0,0)', width=0),
+            showlegend=False,
+            hoverinfo='skip',
+        ),
+        secondary_y=False,
+    )
 
-    # Orange bar when damper too low (IAQ risk)
-    if df['too_low'].sum() > 0:
-        fig.add_trace(
-            go.Bar(
-                x=df['time'], y=df['too_low'],
-                name='IAQ Risk',
-                marker_color='rgba(243, 156, 18, 0.7)',
-                hovertemplate="Damper too low (%{customdata:.0f}%)<extra></extra>",
-                customdata=df['gap'].clip(upper=0),
-                width=3600000,
-            ),
-            secondary_y=False,
-        )
+    # Create wasted energy fill: from expected damper up to actual damper (when actual > expected)
+    wasted_energy_y = []
+    for i, row in df.iterrows():
+        if row['gap'] > 15:
+            # Wasted energy - damper too high, fill up to actual
+            wasted_energy_y.append(row['damper_pct'])
+        else:
+            # No significant waste - stay at expected (no fill)
+            wasted_energy_y.append(row['expected_damper'])
+
+    # Wasted Energy fill (red) - area where actual > expected
+    fig.add_trace(
+        go.Scatter(
+            x=df['time'], y=wasted_energy_y,
+            name='Wasted Energy',
+            fill='tonexty',
+            fillcolor='rgba(231, 76, 60, 0.4)',
+            line=dict(color='rgba(0,0,0,0)', width=0),
+            hovertemplate="Gap: +%{customdata:.0f}%<extra>Wasted Energy</extra>",
+            customdata=df['gap'].clip(lower=0),
+        ),
+        secondary_y=False,
+    )
 
     # Calculate summary stats
     problem_pct = (df['is_problem'].sum() / len(df) * 100) if len(df) > 0 else 0
@@ -732,12 +755,20 @@ def get_savings_context(savings_df: pd.DataFrame, daily_df: pd.DataFrame, compar
 
     lines = ["## Energy Savings Context\n"]
 
+    # Business context
+    lines.append("**Building Operations:**")
+    lines.append(f"- Business Hours: Monday-Friday, {BUSINESS_HOURS_START}am - {BUSINESS_HOURS_END % 12}pm")
+    lines.append("- Weekends: ODCV system does not control the building (HVAC typically off)")
+    lines.append(f"- Electricity Rate: ${ELECTRICITY_RATE}/kWh")
+    lines.append("")
+
     # Yesterday's summary
     if comparisons.get('yesterday'):
         y = comparisons['yesterday']
         date_str = y['date'].strftime('%Y-%m-%d') if hasattr(y['date'], 'strftime') else str(y['date'])
+        cost_saved = y['kwh_saved'] * ELECTRICITY_RATE
         lines.append(f"**Most Recent Day ({date_str}):**")
-        lines.append(f"- Total Energy Saved: {y['kwh_saved']:.1f} kWh")
+        lines.append(f"- Total Energy Saved: {y['kwh_saved']:.1f} kWh (${cost_saved:.2f})")
         lines.append(f"- Average Savings Rate: {y['savings_pct']:.1f}%")
         if y.get('avg_temp') is not None:
             lines.append(f"- Average Outdoor Temp: {y['avg_temp']:.1f}°F")
@@ -860,17 +891,18 @@ def is_occupied_hours(dt: datetime) -> bool:
 def calculate_expected_damper(occupancy: float, max_occ: float = MAX_DESIGN_OCCUPANCY) -> float:
     """Calculate expected damper position based on occupancy.
 
-    Based on: OA-CFM = 710.1 + (7.5 × occupancy)
-    Then scale to damper percentage based on MIN/MAX OA-CFM.
+    Linear relationship: At 0 occupancy, damper should be at minimum (~10%).
+    At max occupancy, damper should be near 100%.
     """
-    expected_cfm = 710.1 + (7.5 * occupancy)
-    # Scale CFM to damper percentage (0-100%)
-    # MIN_OA_CFM = ~0% modulating range, MAX_OA_CFM = 100%
-    damper_range = MAX_OA_CFM - MIN_OA_CFM
-    if damper_range <= 0:
-        return 50.0
+    if max_occ <= 0:
+        return 10.0
 
-    expected_pct = ((expected_cfm - MIN_OA_CFM) / damper_range) * 100
+    # Scale linearly: 0 occupancy = 10%, max occupancy = 95%
+    min_damper = 10.0  # Minimum outdoor air even when unoccupied
+    max_damper = 95.0  # Near full open at max occupancy
+
+    occ_ratio = occupancy / max_occ
+    expected_pct = min_damper + (occ_ratio * (max_damper - min_damper))
     return max(0, min(100, expected_pct))
 
 
@@ -1043,18 +1075,20 @@ def find_continuous_periods(df: pd.DataFrame, mask: pd.Series, min_duration_minu
     return periods
 
 
-def get_compliance_status(row: pd.Series) -> str:
+def get_compliance_status(row: pd.Series) -> tuple:
     """Determine compliance status for a single data point.
 
-    Returns: 'compliant', 'warning', or 'critical'
+    Returns: tuple of (status, issue_description)
+        status: 'compliant' or 'not_compliant'
+        issue_description: String explaining the issue (empty if compliant)
     """
     # Skip checks outside occupied hours
     if not is_occupied_hours(row['time']):
-        return 'compliant'  # Not applicable outside occupied hours
+        return ('compliant', '')
 
     # Skip if in economizer mode (damper should be open)
     if row.get('ahu_state') == ECONOMIZER_STATE:
-        return 'compliant'
+        return ('compliant', '')
 
     occupancy = row.get('occupancy', 0)
     damper_pct = row.get('damper_pct', 50)
@@ -1064,85 +1098,159 @@ def get_compliance_status(row: pd.Series) -> str:
 
     # Critical: Damper stuck closed with high occupancy (IAQ issue)
     if damper_pct < STUCK_CLOSED_DPR_THRESHOLD and occ_pct > HIGH_OCCUPANCY_THRESHOLD:
-        return 'critical'
+        return ('not_compliant', f'Damper stuck closed ({damper_pct:.0f}%) with high occupancy ({occupancy:.0f} people) - IAQ issue')
 
     # Warning: Damper stuck open with low occupancy (energy waste)
     if damper_pct > STUCK_OPEN_DPR_THRESHOLD and occ_pct < LOW_OCCUPANCY_THRESHOLD:
-        return 'warning'
+        return ('not_compliant', f'Damper stuck open ({damper_pct:.0f}%) with low occupancy ({occupancy:.0f} people) - energy waste')
 
     # Warning: Damper not responding to occupancy (deviation > 15%)
     expected_damper = calculate_expected_damper(occupancy)
     deviation = abs(damper_pct - expected_damper)
     if deviation > DAMPER_RESPONSE_TOLERANCE:
-        return 'warning'
+        return ('not_compliant', f'Damper ({damper_pct:.0f}%) not tracking occupancy - expected {expected_damper:.0f}% for {occupancy:.0f} people')
 
-    return 'compliant'
+    return ('compliant', '')
 
 
-def create_compliance_timeline(merged_df: pd.DataFrame, hours: int = 24) -> go.Figure:
-    """Create a compliance timeline showing green/yellow/red status over time."""
+def create_compliance_timeline(merged_df: pd.DataFrame, target_date: Optional[datetime] = None) -> go.Figure:
+    """Create a horizontal timeline showing green/red compliance blocks for each hour.
+
+    Shows a single calendar day as a horizontal timeline:
+    - Green = In Compliance
+    - Red = Out of Compliance (hover shows what's wrong)
+
+    Args:
+        merged_df: DataFrame with BMS data
+        target_date: Date to show (defaults to latest date in data)
+    """
     if merged_df is None or merged_df.empty:
-        return go.Figure()
+        return go.Figure(), 0, pd.DataFrame(), None
 
-    # Filter to last N hours
-    end_time = merged_df['time'].max()
-    start_time = end_time - timedelta(hours=hours)
-    df = merged_df[(merged_df['time'] >= start_time) & (merged_df['time'] <= end_time)].copy()
+    # Get the target date - default to latest date in data
+    if target_date is None:
+        latest_time = merged_df['time'].max()
+        target_date = latest_time.date()
+    elif hasattr(target_date, 'date'):
+        target_date = target_date.date()
+
+    day_start = pd.Timestamp(target_date)
+    day_end = day_start + timedelta(days=1)
+
+    df = merged_df[(merged_df['time'] >= day_start) & (merged_df['time'] < day_end)].copy()
 
     if df.empty:
-        return go.Figure()
+        return go.Figure(), 0, pd.DataFrame(), target_date
 
-    # Calculate compliance status for each point
-    df['compliance'] = df.apply(get_compliance_status, axis=1)
+    # Calculate compliance status for each point (now returns tuple)
+    compliance_results = df.apply(get_compliance_status, axis=1)
+    df['compliance'] = compliance_results.apply(lambda x: x[0])
+    df['issue'] = compliance_results.apply(lambda x: x[1])
 
-    # Map status to colors
-    color_map = {
-        'compliant': '#2ecc71',   # Green
-        'warning': '#f39c12',     # Orange/Yellow
-        'critical': '#e74c3c',    # Red
-    }
+    # Group by hour and get worst status + issues for each hour
+    df['hour'] = df['time'].dt.hour
 
-    df['color'] = df['compliance'].map(color_map)
+    hourly_data = []
+    for hour in range(24):
+        hour_df = df[df['hour'] == hour]
+        if hour_df.empty:
+            # No data for this hour
+            hourly_data.append({
+                'hour': hour,
+                'status': 'no_data',
+                'issue': 'No data',
+                'damper_avg': None,
+                'occ_avg': None
+            })
+        else:
+            # Check if any point in this hour is not compliant
+            not_compliant = hour_df[hour_df['compliance'] == 'not_compliant']
+            if len(not_compliant) > 0:
+                # Get the first issue as representative
+                issue = not_compliant['issue'].iloc[0]
+                status = 'not_compliant'
+            else:
+                issue = ''
+                status = 'compliant'
 
-    # Create figure with colored bars for each time interval
+            hourly_data.append({
+                'hour': hour,
+                'status': status,
+                'issue': issue,
+                'damper_avg': hour_df['damper_pct'].mean(),
+                'occ_avg': hour_df.get('occupancy', pd.Series([0])).mean()
+            })
+
+    hourly_df = pd.DataFrame(hourly_data)
+
+    # Create horizontal timeline - each segment is 1 hour
     fig = go.Figure()
 
-    # Add a bar for each data point
-    for idx, row in df.iterrows():
-        fig.add_trace(go.Bar(
-            x=[row['time']],
-            y=[1],
-            marker_color=row['color'],
-            width=5 * 60 * 1000,  # 5 minutes in milliseconds
-            showlegend=False,
-            hovertemplate=(
-                f"<b>%{{x}}</b><br>"
-                f"Status: {row['compliance'].title()}<br>"
-                f"Damper: {row['damper_pct']:.1f}%<br>"
-                f"Occupancy: {row.get('occupancy', 0):.0f}<br>"
-                f"<extra></extra>"
-            ),
-        ))
+    colors = []
+    hover_texts = []
 
-    # Add legend items
-    for status, color in color_map.items():
-        fig.add_trace(go.Bar(
-            x=[None],
-            y=[None],
-            marker_color=color,
-            name=status.title().replace('Compliant', 'In Compliance').replace('Warning', 'Out of Compliance'),
-            showlegend=True,
-        ))
+    for _, row in hourly_df.iterrows():
+        hour = row['hour']
+        hour_label = f"{hour:02d}:00"
+
+        if row['status'] == 'no_data':
+            colors.append('#cccccc')  # Gray for no data
+            hover_texts.append(f"<b>{hour_label}</b><br>No data available")
+        elif row['status'] == 'compliant':
+            colors.append('#2ecc71')  # Green
+            hover_texts.append(
+                f"<b>{hour_label}</b><br>"
+                f"✓ In Compliance<br>"
+                f"Damper: {row['damper_avg']:.0f}%<br>"
+                f"Occupancy: {row['occ_avg']:.0f}"
+            )
+        else:
+            colors.append('#e74c3c')  # Red
+            hover_texts.append(
+                f"<b>{hour_label}</b><br>"
+                f"✗ Out of Compliance<br>"
+                f"<b>Issue:</b> {row['issue']}<br>"
+                f"Damper: {row['damper_avg']:.0f}%<br>"
+                f"Occupancy: {row['occ_avg']:.0f}"
+            )
+
+    # Create horizontal bar chart as timeline - x-axis is hours, single row
+    fig.add_trace(go.Bar(
+        x=[1] * 24,
+        y=[''] * 24,  # Single row
+        orientation='h',
+        marker_color=colors,
+        hovertext=hover_texts,
+        hoverinfo='text',
+        showlegend=False,
+        base=[h for h in range(24)],  # Position each bar at its hour
+    ))
+
+    # Add legend manually
+    fig.add_trace(go.Bar(
+        x=[None], y=[None],
+        marker_color='#2ecc71',
+        name='In Compliance',
+        orientation='h',
+        showlegend=True,
+    ))
+    fig.add_trace(go.Bar(
+        x=[None], y=[None],
+        marker_color='#e74c3c',
+        name='Out of Compliance',
+        orientation='h',
+        showlegend=True,
+    ))
 
     # Calculate compliance percentage
-    total_points = len(df)
-    compliant_points = (df['compliance'] == 'compliant').sum()
-    compliance_pct = (compliant_points / total_points * 100) if total_points > 0 else 0
+    total_hours_with_data = len(hourly_df[hourly_df['status'] != 'no_data'])
+    compliant_hours = len(hourly_df[hourly_df['status'] == 'compliant'])
+    compliance_pct = (compliant_hours / total_hours_with_data * 100) if total_hours_with_data > 0 else 0
 
+    date_str = target_date.strftime('%B %d, %Y') if hasattr(target_date, 'strftime') else str(target_date)
     fig.update_layout(
-        title=f'24-Hour Compliance Timeline ({compliance_pct:.1f}% In Compliance)',
-        barmode='stack',
-        height=150,
+        title=None,  # We'll show date in the UI separately
+        height=120,
         showlegend=True,
         legend=dict(
             orientation='h',
@@ -1151,21 +1259,25 @@ def create_compliance_timeline(merged_df: pd.DataFrame, hours: int = 24) -> go.F
             xanchor='right',
             x=1
         ),
-        margin=dict(t=60, b=30, l=50, r=50),
+        margin=dict(t=40, b=40, l=20, r=20),
+        xaxis=dict(
+            title=None,
+            showgrid=False,
+            zeroline=False,
+            range=[0, 24],
+            tickmode='array',
+            tickvals=[0, 6, 12, 18, 24],
+            ticktext=['12am', '6am', '12pm', '6pm', '12am'],
+        ),
         yaxis=dict(
             showticklabels=False,
             showgrid=False,
             zeroline=False,
         ),
-        xaxis=dict(
-            title='Time',
-            showgrid=True,
-            gridcolor='rgba(0,0,0,0.1)',
-        ),
-        bargap=0,
+        bargap=0.05,
     )
 
-    return fig, compliance_pct, df
+    return fig, compliance_pct, df, target_date
 
 
 def get_system_health_context(merged_df: pd.DataFrame, alerts: List[Dict]) -> str:
@@ -1217,24 +1329,54 @@ def get_system_health_context(merged_df: pd.DataFrame, alerts: List[Dict]) -> st
 
 SYSTEM_PROMPT = """You are an HVAC investigation agent for ODCV (Occupancy-Driven Control Ventilation) systems.
 
+## YOUR DATA SOURCES - Always Cite These
+
+You are analyzing REAL BMS trend data exported from the building automation system. **Always cite your source when making claims.**
+
+**Data Files You Are Analyzing:**
+| Data | BMS Point | Source File |
+|------|-----------|-------------|
+| Damper Position | `NAEAZ-01-FCB-2.AHUAZ-1.OA-DPR` | OA-DPR trend export (Sept 26 - Dec 12) |
+| Outside Air Flow | `NAEAZ-01-FCB-2.AHUAZ-1.OA-CFM` | OA-CFM trend export (Sept 26 - Dec 12) |
+| AHU State | `NAEAZ-01-FCB-2.AHUAZ-1.AHU-STATE` | AHU-STATE trend export (Sept 26 - Dec 12) |
+| Occupancy | R-Zero sensor feed | auditorium_occupancy export (Sept 26 - Dec 12) |
+| Energy Savings | Calculated from above | Savings_calculations (Oct 24 - Jan 8) |
+
+**AHU-STATE Values:** 1=Satisfied, 2=Economizer, 3=Econ+Cooling, 4=Cooling, 5=Heating, 6=Warmup
+
+**HOW TO CITE - Do this every time:**
+- "Looking at the OA-DPR trend data from NAEAZ-01-FCB-2.AHUAZ-1, I can see the damper is at 90%..."
+- "The occupancy data from the R-Zero sensor shows only 5 people, but the damper (OA-DPR) is still at 90%..."
+- "To verify this, check point NAEAZ-01-FCB-2.AHUAZ-1.OA-DPR in your BMS - you should see values around 90% during these times."
+
+**TELL USERS WHERE TO LOOK:**
+When recommending next steps, give the exact BMS path:
+- "In your BMS, navigate to: NAEAZ-01-FCB-2 > AHUAZ-1 > OA-DPR"
+- "Check the OA-CFM reading at NAEAZ-01-FCB-2 > AHUAZ-1 > OA-CFM"
+
 ## Communication Style - CRITICAL
 
 **Be DIRECT and CONCISE:**
-1. Start by acknowledging what the user observed (e.g., "Yes, there was a significant drop starting Dec 5...")
-2. Lead with your best hypothesis for WHY - don't bury it in analysis
-3. Keep responses SHORT - aim for 3-5 sentences for the main answer
-4. Include a chart to help visualize the issue
+1. Acknowledge what the user observed
+2. Lead with your hypothesis for WHY
+3. **Cite the specific BMS point data** supporting your claim
+4. Tell them exactly where to verify in BMS
+5. Include a chart
+
+**FORMATTING RULES:**
+- Use plain text for numbers and math (e.g., "$2,500/year" not LaTeX)
+- Use markdown bold (**text**) for emphasis
+- Use bullet points for lists
+- Never use LaTeX math notation ($...$, $$...$$, \times, etc.)
+- Write calculations as: "150 kWh x $0.17/kWh = $25.50/day"
 
 **DO NOT:**
-- List dates and percentages in long tables - this is hard to read
-- Use verbose section headers like "Pattern Analysis" or "Evidence Supporting This"
-- Over-explain every detail - be concise
+- Make claims without citing the data source
+- Say "I don't have access to BMS data" - you DO have trend exports
+- Be vague - give specific point names and values
+- Use LaTeX or math notation - use plain text instead
 
 ## CHARTS - You Can Show Visuals!
-
-You can include charts in your response. Match the chart to what you're explaining!
-
-**Available charts - USE THE RIGHT ONE:**
 
 | Chart | Command | Use When Discussing |
 |-------|---------|---------------------|
@@ -1243,49 +1385,35 @@ You can include charts in your response. Match the chart to what you're explaini
 | December Focus | `[CHART:december_focus]` | December specifically, day-by-day view |
 | Damper vs Occupancy | `[CHART:damper_occupancy]` | **Damper issues, stuck damper, control problems** |
 
-**CRITICAL: If you mention "damper stuck" or "damper not responding", you MUST use `[CHART:damper_occupancy]`**
+**CRITICAL: If you mention "damper stuck", you MUST use `[CHART:damper_occupancy]`**
 
-**Example Response Style:**
+**Example Response:**
 
-User: "Why did savings drop around Dec 5?"
+User: "Why did savings drop? Where should I look?"
 
 Good response:
-"Yes, savings dropped sharply from 27% to 13-15% starting Dec 4-5.
+"Savings dropped from 27% to 13% starting Dec 4-5.
 
-**Most likely cause:** The damper is stuck open during weekdays, bringing in too much outside air. You can see here that the damper stays high even when occupancy drops:
+Looking at the **OA-DPR trend data** (NAEAZ-01-FCB-2.AHUAZ-1.OA-DPR), the damper is stuck at ~90% even when occupancy drops to single digits. The **occupancy sensor** shows <10 people, but the damper isn't responding.
 
 [CHART:damper_occupancy]
 
-Weekends work fine (27-28% savings) because the AHU shuts down, but weekdays the damper gets stuck. Want me to look at the exact times this started?"
-
-## Your Investigation Approach
-
-When asked about savings drops or anomalies:
-1. Acknowledge what they observed
-2. State your hypothesis confidently (lead with the "why")
-3. Show a relevant chart
-4. Offer to dig deeper
+**To verify:** In your BMS, check `NAEAZ-01-FCB-2 > AHUAZ-1 > OA-DPR`. You should see it stuck around 90%. Also check if there's a manual override active on AHU-STATE."
 
 ## Key Technical Knowledge
 
 **Savings Formula:**
-- Savings come from running LESS outside air than the 17,700 CFM baseline
-- Fan savings follow cubic law (50% CFM reduction = 87.5% fan power savings)
-- Weather affects thermal savings (mild temps = smaller temperature differential = less savings opportunity)
+- Baseline: 17,700 CFM (what system would use without ODCV)
+- Savings = reduced CFM converted to kWh
+- Fan savings follow cubic law
 
-**Common Root Causes for Savings Drops:**
-1. Damper stuck open → system bringing in too much outside air
-2. Occupancy sensor issue → system doesn't know to reduce ventilation
-3. Controls override → someone forced higher ventilation
-4. Economizer mode → damper intentionally open for free cooling (not a problem)
+**Common Root Causes:**
+1. Damper stuck → OA-DPR not tracking occupancy
+2. Sensor issue → Check R-Zero occupancy values
+3. Override active → Check AHU-STATE for manual mode
+4. Economizer (AHU-STATE=2) → Normal in mild weather
 
-**System Health Alert Rules:**
-- Stuck Open: Damper >90% with <10% occupancy for >30 min
-- Stuck Closed: Damper <20% with >75% occupancy for >30 min
-- Not Responding: Actual vs expected damper differs >15% for >1 hr
-- ODCV Inactive: Low correlation between occupancy and damper over 7 days
-
-Keep it conversational and helpful, not like a formal report. Always include at least one chart when explaining patterns.
+Always cite BMS point names and tell users where to look.
 """
 
 
@@ -1800,327 +1928,202 @@ load_savings_on_startup()
 # UI COMPONENTS
 # =============================================================================
 
-def render_sidebar():
-    """Render the sidebar with data upload and settings."""
-    with st.sidebar:
-        st.header("Data Upload")
-
-        # API Key - check env first, then Streamlit secrets, then allow manual input
-        env_api_key = os.getenv("ANTHROPIC_API_KEY", "")
-
-        # Try Streamlit secrets (for cloud deployment)
-        if not env_api_key:
-            try:
-                env_api_key = st.secrets.get("ANTHROPIC_API_KEY", "")
-            except Exception:
-                pass
-
-        if env_api_key:
-            st.success("API key loaded")
-            api_key = env_api_key
-        else:
-            api_key = st.text_input(
-                "Anthropic API Key",
-                type="password",
-                help="Get your API key from console.anthropic.com"
-            )
-
-        if api_key and not validate_api_key(api_key):
-            st.warning("API key format looks incorrect. It should start with 'sk-ant-'")
-
-        st.divider()
-
-        # File upload
-        uploaded_files = st.file_uploader(
-            "Upload BMS CSV Files",
-            type=['csv'],
-            accept_multiple_files=True,
-            help="Upload one or more BMS data CSV files"
-        )
-
-        if uploaded_files and st.button("Load Data", type="primary"):
-            with st.spinner("Loading data..."):
-                st.session_state.data = load_bms_data(uploaded_files)
-                if st.session_state.data is not None:
-                    st.session_state.data_summary = prepare_data_summary(st.session_state.data)
-                    st.session_state.auto_analysis = None  # Reset auto-analysis
-                    st.session_state.analysis_run = False
-                    st.success(f"Loaded {len(st.session_state.data):,} records!")
-                else:
-                    st.error("Failed to load data. Check file format.")
-
-        # Show data summary if loaded
-        if st.session_state.data is not None:
-            st.divider()
-            st.subheader("Loaded Data")
-            st.markdown(st.session_state.data_summary)
-
-            # Quick visualization selector
-            st.divider()
-            st.subheader("Quick Visualize")
-            available_metrics = sorted(st.session_state.data['metric'].dropna().unique())
-            selected = st.multiselect(
-                "Select metrics to plot",
-                available_metrics,
-                max_selections=5
-            )
-
-            if selected and st.button("Generate Chart"):
-                st.session_state.chart_metrics = selected
-
-    return api_key
-
-
 def render_savings_dashboard():
-    """Render the energy savings dashboard at the top of the page."""
+    """Render the energy savings dashboard - compact KPIs and chart."""
     if not st.session_state.savings_loaded:
         st.info("Loading savings data...")
         return
 
-    comparisons = st.session_state.savings_comparisons
     daily_df = st.session_state.daily_savings
 
-    if not comparisons or comparisons.get('yesterday') is None:
+    if daily_df is None or len(daily_df) == 0:
         st.warning("No savings data available to display.")
         return
 
-    # Header
-    st.subheader("Energy Savings Overview")
+    # Get chart data with status info
+    chart_result = create_savings_chart(daily_df)
+    fig, baseline_pct, chart_df = chart_result
 
-    # Get savings chart data with status info
-    if daily_df is not None and len(daily_df) > 0:
-        chart_result = create_savings_chart(daily_df)
-        fig, baseline_pct, chart_df = chart_result
+    # Calculate 30-day summary KPIs
+    last_30 = chart_df.tail(30) if len(chart_df) >= 30 else chart_df
 
-        # Calculate status metrics
-        on_track_days = (chart_df['status'] == 'on_track').sum()
-        warning_days = (chart_df['status'] == 'warning').sum()
-        critical_days = (chart_df['status'] == 'critical').sum()
-        total_days = len(chart_df)
-        on_track_pct = (on_track_days / total_days * 100) if total_days > 0 else 0
-        off_track_pct = 100 - on_track_pct
-    else:
-        fig = None
-        baseline_pct = 27.0
-        on_track_pct = 0
-        off_track_pct = 0
-        warning_days = 0
-        critical_days = 0
+    avg_savings_pct = last_30['savings_pct'].mean()
+    max_savings_pct = last_30['savings_pct'].max()
+    total_kwh = last_30['total_kwh_saved'].sum()
+    total_carbon = last_30['carbon_savings'].sum() if 'carbon_savings' in last_30.columns else 0
+    warning_days = (last_30['status'] == 'warning').sum()
+    critical_days = (last_30['status'] == 'critical').sum()
+    off_track_days = warning_days + critical_days
 
-    yesterday = comparisons['yesterday']
-    date_str = yesterday['date'].strftime('%b %d') if hasattr(yesterday['date'], 'strftime') else str(yesterday['date'])[:10]
+    # Calculate previous 30-day period for comparison
+    prev_avg_pct = None
+    prev_kwh = None
+    if len(chart_df) >= 60:
+        prev_30 = chart_df.iloc[-60:-30]
+        prev_avg_pct = prev_30['savings_pct'].mean()
+        prev_kwh = prev_30['total_kwh_saved'].sum()
 
-    # Determine current status
-    current_status = get_savings_status(yesterday['savings_pct'], baseline_pct)
+    # Get date range for the last 30 days
+    start_date = last_30['timestamp'].min()
+    end_date = last_30['timestamp'].max()
+    date_range_str = f"{start_date.strftime('%b %d, %Y')} - {end_date.strftime('%b %d, %Y')}"
 
-    # Top metrics row - Status indicator, On Track %, Off Track Days
-    col1, col2, col3, col4 = st.columns(4)
+    # Compact header with 5 KPIs in one row - use columns for header with tooltip
+    header_col, info_col = st.columns([1, 6])
+    with header_col:
+        st.markdown("**Last 30 Days**")
+    with info_col:
+        st.markdown(f"<span style='color: #888; font-size: 0.85em;'>ℹ️ {date_range_str}</span>", unsafe_allow_html=True)
+
+    # Calculate cost savings
+    total_cost_savings = total_kwh * ELECTRICITY_RATE
+    prev_cost = prev_kwh * ELECTRICITY_RATE if prev_kwh else None
+
+    col1, col2, col3, col4, col5 = st.columns(5)
 
     with col1:
-        # Current status with color
-        if current_status == 'on_track':
-            st.success(f"**ON TRACK**")
-        elif current_status == 'warning':
-            st.warning(f"**BELOW TARGET**")
-        else:
-            st.error(f"**OFF TRACK**")
-        st.caption(f"Latest: {yesterday['savings_pct']:.1f}%")
-
+        avg_delta = f"{avg_savings_pct - prev_avg_pct:+.0f}% vs prior" if prev_avg_pct else None
+        st.metric(
+            "Avg Energy Savings",
+            f"{avg_savings_pct:.0f}%",
+            delta=avg_delta,
+            help="Average daily energy savings percentage over the last 30 days"
+        )
     with col2:
+        cost_delta = None
+        if prev_cost and prev_cost > 0:
+            cost_change_pct = ((total_cost_savings - prev_cost) / prev_cost) * 100
+            cost_delta = f"{cost_change_pct:+.0f}% vs prior"
         st.metric(
-            label="ON TRACK",
-            value=f"{on_track_pct:.0f}%",
-            help=f"Days within 3% of {baseline_pct:.0f}% target"
+            "Cost Savings",
+            f"${total_cost_savings:,.0f}",
+            delta=cost_delta,
+            help=f"Total cost savings at ${ELECTRICITY_RATE}/kWh over the last 30 days"
         )
-
     with col3:
-        off_track_count = warning_days + critical_days
-        st.metric(
-            label="OFF TRACK DAYS",
-            value=str(off_track_count),
-            delta=f"{critical_days} critical" if critical_days > 0 else None,
-            delta_color="inverse"
-        )
-
+        kwh_delta = None
+        if prev_kwh and prev_kwh > 0:
+            kwh_change_pct = ((total_kwh - prev_kwh) / prev_kwh) * 100
+            kwh_delta = f"{kwh_change_pct:+.0f}% vs prior"
+        if total_kwh >= 1000:
+            st.metric(
+                "Energy Saved",
+                f"{total_kwh/1000:.1f} MWh",
+                delta=kwh_delta,
+                help="Total kilowatt-hours saved over the last 30 days"
+            )
+        else:
+            st.metric(
+                "Energy Saved",
+                f"{total_kwh:.0f} kWh",
+                delta=kwh_delta,
+                help="Total kilowatt-hours saved over the last 30 days"
+            )
     with col4:
-        has_carbon = yesterday.get('carbon_savings') is not None
-        if has_carbon:
-            st.metric(
-                label="Carbon Saved",
-                value=f"{yesterday['carbon_savings']:.2f} mt",
-                help="Metric tons of CO2 avoided"
-            )
-        else:
-            st.metric(
-                label=f"Latest ({date_str})",
-                value=f"{yesterday['kwh_saved']:.0f} kWh",
-            )
-
-    # Day/week comparison row
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
         st.metric(
-            label=f"Energy Saved ({date_str})",
-            value=f"{yesterday['kwh_saved']:.0f} kWh",
+            "Carbon Saved",
+            f"{total_carbon:.1f} mt CO₂",
+            help="Total metric tons of CO₂ emissions avoided over the last 30 days"
+        )
+    with col5:
+        delta_text = f"{critical_days} critical" if critical_days > 0 else None
+        st.metric(
+            "Off-Track Days",
+            f"{off_track_days}",
+            delta=delta_text,
+            delta_color="inverse",
+            help=f"Days below {baseline_pct:.0f}% target. Warning: 3-6% below. Critical: >6% below."
         )
 
-    with col2:
-        if comparisons.get('day_over_day'):
-            dod = comparisons['day_over_day']
-            delta_val = dod['pct_change']
-            st.metric(
-                label="Day / Day",
-                value=f"{yesterday['savings_pct']:.1f}%",
-                delta=f"{delta_val:+.1f}%",
-                delta_color="normal"
-            )
-        else:
-            st.metric(label="Day / Day", value="N/A")
-
-    with col3:
-        if comparisons.get('week_over_week'):
-            wow = comparisons['week_over_week']
-            delta_val = wow['pct_change']
-            st.metric(
-                label="Week / Week",
-                value=f"{yesterday['savings_pct']:.1f}%",
-                delta=f"{delta_val:+.1f}%",
-                delta_color="normal"
-            )
-        else:
-            st.metric(label="Week / Week", value="N/A")
-
-    # Savings chart with color-coded bars
+    # Chart - make it more compact
     if fig is not None:
-        st.plotly_chart(fig, use_container_width=True)
-
-    st.divider()
+        fig.update_layout(height=280, margin=dict(t=30, b=30, l=40, r=20))
+        st.plotly_chart(fig, use_container_width=True, key="savings_chart")
 
 
 def render_system_health_tab():
-    """Render the System Health monitoring tab with compliance timeline."""
+    """Render the System Health monitoring tab - compact view."""
     if not st.session_state.health_loaded:
         st.info("Loading system health data...")
         return
 
     merged_df = st.session_state.health_merged
-    alerts = st.session_state.health_alerts
 
     if merged_df is None or merged_df.empty:
         st.warning("No system health data available. Check BMS data files.")
         return
 
-    # Header
-    st.subheader("ODCV System Health Monitor")
-    latest_date = merged_df['time'].max()
-    st.caption(f"Outside Air Damper Compliance - {latest_date.strftime('%B %d, %Y')}")
+    # Get available date range from data
+    min_date = merged_df['time'].min().date()
+    max_date = merged_df['time'].max().date()
 
-    # Create compliance timeline and get stats
-    result = create_compliance_timeline(merged_df, hours=24)
-    if isinstance(result, tuple):
-        fig, compliance_pct, compliance_df = result
+    # Initialize selected date in session state if not present
+    if 'health_selected_date' not in st.session_state:
+        st.session_state.health_selected_date = max_date
+
+    selected_date = st.session_state.health_selected_date
+
+    # Compact date navigation - date and arrows on same row
+    col_prev, col_date, col_next = st.columns([1, 4, 1])
+
+    with col_prev:
+        if st.button("◀", key="prev_day", help="Previous day"):
+            new_date = st.session_state.health_selected_date - timedelta(days=1)
+            if new_date >= min_date:
+                st.session_state.health_selected_date = new_date
+                st.rerun()
+
+    with col_date:
+        date_display = selected_date.strftime('%a, %b %d, %Y')
+        label = f"**{date_display}**" + (" (Latest)" if selected_date == max_date else "")
+        st.markdown(label)
+
+    with col_next:
+        if st.button("▶", key="next_day", help="Next day"):
+            new_date = st.session_state.health_selected_date + timedelta(days=1)
+            if new_date <= max_date:
+                st.session_state.health_selected_date = new_date
+                st.rerun()
+
+    # Create compliance timeline for selected date
+    result = create_compliance_timeline(merged_df, target_date=st.session_state.health_selected_date)
+    if len(result) == 4:
+        fig, compliance_pct, compliance_df, actual_date = result
     else:
-        fig = result
-        compliance_pct = 0
-        compliance_df = pd.DataFrame()
+        fig, compliance_pct, compliance_df = result[:3]
 
-    # Top metrics row - Compliance % and Total Alerts
-    col1, col2 = st.columns(2)
+    # Show message if no data for selected date
+    if compliance_df.empty:
+        st.warning(f"No data available for {selected_date.strftime('%B %d, %Y')}")
+        return
 
-    with col1:
-        # Out of compliance percentage
-        out_of_compliance = 100 - compliance_pct
-        st.metric(
-            label="OUT OF COMPLIANCE",
-            value=f"{out_of_compliance:.1f}%",
-        )
+    # Compact metrics row
+    out_of_compliance = 100 - compliance_pct
+    hours_out = 0
+    if not compliance_df.empty and 'compliance' in compliance_df.columns:
+        hours_out = compliance_df.groupby(compliance_df['time'].dt.hour)['compliance'].apply(
+            lambda x: 'not_compliant' in x.values
+        ).sum()
 
-    with col2:
-        st.metric(
-            label="TOTAL ALERTS",
-            value=str(len(alerts)),
-        )
+    # Count alerts for this day
+    alerts_today = 0
+    if st.session_state.health_alerts:
+        for alert in st.session_state.health_alerts:
+            alert_date = alert['start'].date() if hasattr(alert['start'], 'date') else alert['start']
+            if alert_date == selected_date:
+                alerts_today += 1
 
-    # Compliance timeline
-    st.plotly_chart(fig, use_container_width=True)
-
-    # Selected time details (show latest point info)
-    latest = merged_df.iloc[-1]
-    st.markdown("---")
-
-    # Time display
-    time_str = latest['time'].strftime('%H:%M') if hasattr(latest['time'], 'strftime') else str(latest['time'])
-    date_str = latest['time'].strftime('%Y-%m-%dT%H:%M:%S') if hasattr(latest['time'], 'strftime') else str(latest['time'])
-    st.markdown(f"**Time: {time_str}**")
-    st.caption(date_str)
-
-    # Current status metrics
     col1, col2, col3 = st.columns(3)
-
     with col1:
-        st.metric(label="DAMPER POSITION", value=f"{latest['damper_pct']:.1f}%")
-
+        st.metric("Out of Compliance", f"{out_of_compliance:.0f}%")
     with col2:
-        occ_val = latest.get('occupancy', 0)
-        st.metric(label="OCCUPANCY", value=f"{occ_val:.0f} people" if pd.notna(occ_val) else "N/A")
-
+        st.metric("Hours Out", f"{hours_out}")
     with col3:
-        occ_pct = (occ_val / MAX_DESIGN_OCCUPANCY * 100) if MAX_DESIGN_OCCUPANCY > 0 and pd.notna(occ_val) else 0
-        st.metric(label="OCCUPANCY %", value=f"{occ_pct:.1f}%")
+        st.metric("Alerts", f"{alerts_today}")
 
-    # CFM metrics
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        oa_cfm = latest.get('oa_cfm', 0)
-        st.metric(label="ACTUAL OA CFM", value=f"{oa_cfm:,.0f}" if pd.notna(oa_cfm) else "N/A")
-
-    with col2:
-        expected_cfm = 710.1 + (7.5 * occ_val) if pd.notna(occ_val) else MIN_OA_CFM
-        st.metric(label="EXPECTED OA CFM", value=f"{expected_cfm:,.0f}")
-
-    with col3:
-        if pd.notna(oa_cfm) and expected_cfm > 0:
-            cfm_deviation = abs(oa_cfm - expected_cfm) / expected_cfm * 100
-            st.metric(label="CFM DEVIATION", value=f"{cfm_deviation:.1f}%")
-        else:
-            st.metric(label="CFM DEVIATION", value="N/A")
-
-    # Current compliance status
-    current_status = get_compliance_status(latest)
-    if current_status == 'critical':
-        st.error("**CRITICAL**: Damper closed with high occupancy - IAQ issue")
-    elif current_status == 'warning':
-        # Determine which warning
-        expected_damper = calculate_expected_damper(occ_val if pd.notna(occ_val) else 0)
-        deviation = abs(latest['damper_pct'] - expected_damper)
-        if deviation > DAMPER_RESPONSE_TOLERANCE:
-            st.warning(f"**OUT OF COMPLIANCE**: OA CFM off by >{DAMPER_RESPONSE_TOLERANCE}%")
-        elif latest['damper_pct'] > STUCK_OPEN_DPR_THRESHOLD:
-            st.warning("**OUT OF COMPLIANCE**: Damper stuck open with low occupancy")
-    else:
-        st.success("**IN COMPLIANCE**: System operating normally")
-
-    # Rule checks summary
-    st.markdown("**Rule Checks:**")
-    occ_pct_val = occ_val / MAX_DESIGN_OCCUPANCY if MAX_DESIGN_OCCUPANCY > 0 and pd.notna(occ_val) else 0
-
-    # Rule 1: Stuck open
-    stuck_open_pass = not (latest['damper_pct'] > STUCK_OPEN_DPR_THRESHOLD and occ_pct_val < LOW_OCCUPANCY_THRESHOLD)
-    st.markdown(f"• Damper >90% with <10% occupancy: {'✓ PASS' if stuck_open_pass else '✗ FAIL'}")
-
-    # Rule 2: Stuck closed
-    stuck_closed_pass = not (latest['damper_pct'] < STUCK_CLOSED_DPR_THRESHOLD and occ_pct_val > HIGH_OCCUPANCY_THRESHOLD)
-    st.markdown(f"• Damper <20% with >75% occupancy: {'✓ PASS' if stuck_closed_pass else '✗ FAIL'}")
-
-    # Rule 3: CFM deviation
-    expected_damper = calculate_expected_damper(occ_val if pd.notna(occ_val) else 0)
-    deviation = abs(latest['damper_pct'] - expected_damper)
-    cfm_deviation_pass = deviation <= DAMPER_RESPONSE_TOLERANCE
-    st.markdown(f"• OA CFM deviation <{DAMPER_RESPONSE_TOLERANCE}%: {'✓ PASS' if cfm_deviation_pass else '✗ FAIL'}")
-
-    st.divider()
+    # Compliance timeline - keep enough margin for axis labels
+    fig.update_layout(height=120, margin=dict(t=30, b=30, l=30, r=30))
+    st.plotly_chart(fig, use_container_width=True, key=f"timeline_{selected_date}")
 
 
 def render_example_questions():
@@ -2305,177 +2308,176 @@ def parse_chart_commands(response: str) -> Tuple[str, List[str]]:
     return cleaned.strip(), charts
 
 
-def render_shared_chat(api_key: str):
-    """Render the shared chat agent that can answer questions about both savings and system health."""
+def get_combined_context():
+    """Build combined context from both savings and system health data."""
+    context_parts = []
 
-    # Initialize pending chart in session state
-    if 'pending_chart' not in st.session_state:
-        st.session_state.pending_chart = None
+    # Add savings context
+    if st.session_state.savings_loaded:
+        savings_context = get_savings_context(
+            st.session_state.savings_data,
+            st.session_state.daily_savings,
+            st.session_state.savings_comparisons
+        )
+        context_parts.append(savings_context)
 
-    # Build combined context from both savings and system health
-    def get_combined_context():
-        context_parts = []
+    # Add system health context
+    if st.session_state.health_loaded and st.session_state.health_merged is not None:
+        health_context = get_system_health_context(
+            st.session_state.health_merged,
+            st.session_state.health_alerts
+        )
+        context_parts.append(health_context)
 
-        # Add savings context
-        if st.session_state.savings_loaded:
-            savings_context = get_savings_context(
-                st.session_state.savings_data,
-                st.session_state.daily_savings,
-                st.session_state.savings_comparisons
-            )
-            context_parts.append(savings_context)
+    # Add BMS data context if uploaded
+    if st.session_state.data is not None:
+        bms_context = build_data_context(
+            st.session_state.data,
+            st.session_state.data_summary
+        )
+        context_parts.append(bms_context)
 
-        # Add system health context
-        if st.session_state.health_loaded and st.session_state.health_merged is not None:
-            health_context = get_system_health_context(
-                st.session_state.health_merged,
-                st.session_state.health_alerts
-            )
-            context_parts.append(health_context)
+    return "\n\n".join(context_parts)
 
-        # Add BMS data context if uploaded
-        if st.session_state.data is not None:
-            bms_context = build_data_context(
-                st.session_state.data,
-                st.session_state.data_summary
-            )
-            context_parts.append(bms_context)
 
-        return "\n\n".join(context_parts)
+def render_bottom_chat(api_key: str):
+    """Render the chat agent at the bottom of the page."""
+    st.divider()
+    st.markdown("### 💬 Ask the Agent")
 
-    # Show example questions and quick chart buttons
-    if not st.session_state.messages:
-        st.markdown("### Ask the Agent")
-        col1, col2 = st.columns(2)
-        with col1:
-            st.markdown("""
-            **Energy Savings:**
-            - Why did savings drop yesterday?
-            - What caused the dip on Dec 8th?
-            - Compare weekday vs weekend savings
-            """)
-        with col2:
-            st.markdown("""
-            **System Health:**
-            - Is the damper responding to occupancy?
-            - Why are there alerts on the system?
-            - Is the ODCV system active?
-            """)
+    # Quick question buttons in a row
+    q_cols = st.columns(3)
+    with q_cols[0]:
+        if st.button("Is my system working as expected?", key="bq1", use_container_width=True):
+            st.session_state.messages.append({"role": "user", "content": "Is my system working as expected?"})
+            st.rerun()
+    with q_cols[1]:
+        if st.button("Why did savings change recently?", key="bq2", use_container_width=True):
+            st.session_state.messages.append({"role": "user", "content": "Why did savings change recently?"})
+            st.rerun()
+    with q_cols[2]:
+        if st.button("Damper status?", key="bq3", use_container_width=True):
+            st.session_state.messages.append({"role": "user", "content": "What is the current damper status?"})
+            st.rerun()
 
-        # Quick chart buttons
-        st.markdown("**Quick Charts:**")
-        chart_cols = st.columns(4)
-        with chart_cols[0]:
-            if st.button("Weekday vs Weekend", key="btn_weekday"):
-                st.session_state.pending_chart = 'weekday_weekend'
-                st.rerun()
-        with chart_cols[1]:
-            if st.button("Savings Trend", key="btn_trend"):
-                st.session_state.pending_chart = 'savings_trend'
-                st.rerun()
-        with chart_cols[2]:
-            if st.button("December Focus", key="btn_dec"):
-                st.session_state.pending_chart = 'december_focus'
-                st.rerun()
-        with chart_cols[3]:
-            if st.button("Damper vs Occupancy", key="btn_damper"):
-                st.session_state.pending_chart = 'damper_occupancy'
-                st.rerun()
+    # Check if there's a pending user message that needs a response
+    needs_response = (
+        st.session_state.messages and
+        st.session_state.messages[-1]["role"] == "user"
+    )
 
-    # Display any pending chart
-    if st.session_state.pending_chart:
-        chart = render_chart_for_agent(st.session_state.pending_chart)
-        if chart:
-            st.plotly_chart(chart, use_container_width=True, key="pending_chart")
-        st.session_state.pending_chart = None
-
-    # Display chat history with embedded charts
-    for msg_idx, message in enumerate(st.session_state.messages):
-        with st.chat_message(message["role"]):
-            # Check for chart commands in assistant messages
-            if message["role"] == "assistant":
-                cleaned_content, charts = parse_chart_commands(message["content"])
-                st.markdown(cleaned_content)
-                # Render any charts with unique keys
+    # Chat history (excluding last user message if we need to respond to it)
+    display_messages = st.session_state.messages[:-1] if needs_response else st.session_state.messages
+    for msg_idx, msg in enumerate(display_messages):
+        with st.chat_message(msg["role"]):
+            if msg["role"] == "assistant":
+                cleaned, charts = parse_chart_commands(msg["content"])
+                st.markdown(cleaned)
                 for chart_idx, chart_name in enumerate(charts):
                     chart = render_chart_for_agent(chart_name)
                     if chart:
-                        st.plotly_chart(chart, use_container_width=True, key=f"hist_{msg_idx}_{chart_idx}")
+                        st.plotly_chart(chart, use_container_width=True, key=f"bottom_{msg_idx}_{chart_idx}")
             else:
-                st.markdown(message["content"])
+                st.markdown(msg["content"])
+
+    # Process pending user message (from quick buttons)
+    if needs_response:
+        pending_msg = st.session_state.messages[-1]["content"]
+        with st.chat_message("user"):
+            st.markdown(pending_msg)
+
+        if not api_key:
+            st.error("API key not configured. Please set ANTHROPIC_API_KEY in environment or secrets.")
+            return
+
+        with st.chat_message("assistant"):
+            with st.spinner("Investigating..."):
+                try:
+                    response = get_ai_response(api_key, st.session_state.messages, get_combined_context())
+                    cleaned, charts = parse_chart_commands(response)
+                    st.markdown(cleaned)
+                    for chart_idx, chart_name in enumerate(charts):
+                        chart = render_chart_for_agent(chart_name)
+                        if chart:
+                            st.plotly_chart(chart, use_container_width=True, key=f"pending_{chart_idx}")
+                    st.session_state.messages.append({"role": "assistant", "content": response})
+                except ValueError as e:
+                    st.error(str(e))
 
     # Chat input
     if prompt := st.chat_input("Ask about energy savings or system health..."):
         if not api_key:
-            st.error("Please enter your Anthropic API key in the sidebar.")
+            st.error("API key not configured. Please set ANTHROPIC_API_KEY in environment or secrets.")
             return
 
-        # Add user message
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
 
-        # Get AI response
         with st.chat_message("assistant"):
             with st.spinner("Investigating..."):
                 try:
-                    data_context = get_combined_context()
-
-                    response = get_ai_response(
-                        api_key,
-                        st.session_state.messages,
-                        data_context
-                    )
-
-                    # Parse and render response with charts
-                    cleaned_content, charts = parse_chart_commands(response)
-                    st.markdown(cleaned_content)
-
-                    # Render any charts the agent requested
+                    response = get_ai_response(api_key, st.session_state.messages, get_combined_context())
+                    cleaned, charts = parse_chart_commands(response)
+                    st.markdown(cleaned)
                     for chart_idx, chart_name in enumerate(charts):
                         chart = render_chart_for_agent(chart_name)
                         if chart:
                             st.plotly_chart(chart, use_container_width=True, key=f"new_{chart_idx}")
-
-                    st.session_state.messages.append({
-                        "role": "assistant",
-                        "content": response
-                    })
+                    st.session_state.messages.append({"role": "assistant", "content": response})
                 except ValueError as e:
                     st.error(str(e))
 
 
 def main():
     """Main application entry point."""
+
+    # Get API key from environment or secrets
+    api_key = os.getenv("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        try:
+            api_key = st.secrets.get("ANTHROPIC_API_KEY", "")
+        except Exception:
+            pass
+
+    # Hide sidebar
+    st.markdown("""
+    <style>
+    [data-testid="stSidebar"] { display: none !important; }
+    [data-testid="stSidebarCollapsedControl"] { display: none !important; }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # Main content
     st.title("ODCV Dashboard")
-    st.caption("Monitor energy savings and system health with AI analysis")
 
-    api_key = render_sidebar()
+    # Initialize view state
+    if 'current_view' not in st.session_state:
+        st.session_state.current_view = 'energy_savings'
 
-    # Main content tabs - Energy Savings and System Health
-    tab1, tab2 = st.tabs(["Energy Savings", "System Health"])
+    # Navigation buttons instead of tabs
+    col1, col2, col3 = st.columns([1, 1, 3])
+    with col1:
+        if st.button("⚡ Energy Savings", use_container_width=True,
+                     type="primary" if st.session_state.current_view == 'energy_savings' else "secondary"):
+            st.session_state.current_view = 'energy_savings'
+            st.rerun()
+    with col2:
+        if st.button("🔧 System Health", use_container_width=True,
+                     type="primary" if st.session_state.current_view == 'system_health' else "secondary"):
+            st.session_state.current_view = 'system_health'
+            st.rerun()
 
-    with tab1:
+    st.divider()
+
+    # Render selected view
+    if st.session_state.current_view == 'energy_savings':
         render_savings_dashboard()
-
-        # Show chart if metrics selected from sidebar (for uploaded BMS data)
-        if st.session_state.chart_metrics and st.session_state.data is not None:
-            chart = create_time_series_chart(
-                st.session_state.data,
-                st.session_state.chart_metrics
-            )
-            st.plotly_chart(chart, use_container_width=True)
-
-    with tab2:
+    else:
         render_system_health_tab()
 
-    # Shared chat agent at bottom (visible on both tabs)
-    st.divider()
-    render_shared_chat(api_key)
-
-    # Footer
-    st.divider()
-    st.caption("Built for ODCV analysis | Powered by Claude")
+    # Chat at the bottom - persists across tab switches
+    render_bottom_chat(api_key)
 
 
 if __name__ == "__main__":
