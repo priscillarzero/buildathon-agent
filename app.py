@@ -1801,17 +1801,24 @@ def render_sidebar():
     with st.sidebar:
         st.header("Data Upload")
 
-        # API Key - check env first, then allow manual input
+        # API Key - check env first, then Streamlit secrets, then allow manual input
         env_api_key = os.getenv("ANTHROPIC_API_KEY", "")
 
+        # Try Streamlit secrets (for cloud deployment)
+        if not env_api_key:
+            try:
+                env_api_key = st.secrets.get("ANTHROPIC_API_KEY", "")
+            except Exception:
+                pass
+
         if env_api_key:
-            st.success("API key loaded from .env")
+            st.success("API key loaded")
             api_key = env_api_key
         else:
             api_key = st.text_input(
                 "Anthropic API Key",
                 type="password",
-                help="Get your API key from console.anthropic.com (or set ANTHROPIC_API_KEY in .env)"
+                help="Get your API key from console.anthropic.com"
             )
 
         if api_key and not validate_api_key(api_key):
