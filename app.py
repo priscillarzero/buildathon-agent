@@ -48,12 +48,16 @@ _APP_DIR = Path(__file__).resolve().parent
 # Load knowledge base
 KNOWLEDGE_BASE_PATH = _APP_DIR / "knowledge" / "hvac_domain.md"
 
-# Savings data path
-SAVINGS_DATA_PATH = _APP_DIR.parent / "BMS_sample_data" / "Savings_calculations_1024-010825.csv"
-RAW_DATA_PATH = _APP_DIR.parent / "BMS_sample_data" / "Savings_Raw Data_1024-010825.csv"
+# Savings data path - check both local dev (parent) and deployed (same dir) locations
+_LOCAL_BMS_DIR = _APP_DIR.parent / "BMS_sample_data"
+_DEPLOYED_BMS_DIR = _APP_DIR / "BMS_sample_data"
+BMS_DATA_BASE = _DEPLOYED_BMS_DIR if _DEPLOYED_BMS_DIR.exists() else _LOCAL_BMS_DIR
+
+SAVINGS_DATA_PATH = BMS_DATA_BASE / "Savings_calculations_1024-010825.csv"
+RAW_DATA_PATH = BMS_DATA_BASE / "Savings_Raw Data_1024-010825.csv"
 
 # BMS point data paths for System Health monitoring
-BMS_DATA_DIR = _APP_DIR.parent / "BMS_sample_data" / "BMS data"
+BMS_DATA_DIR = BMS_DATA_BASE / "BMS data"
 OA_DPR_FILE = BMS_DATA_DIR / "NAEAZ-01-FCB-2_AHUAZ-1_OA-DPR_20250926_0000_20251212_2359.csv"
 AHU_STATE_FILE = BMS_DATA_DIR / "NAEAZ-01-FCB-2_AHUAZ-1_AHU-STATE_20250926_0000_20251212_2359.csv"
 OCCUPANCY_FILE = BMS_DATA_DIR / "auditorium_occupancy_20250926_0000_20251212_2359.csv"
