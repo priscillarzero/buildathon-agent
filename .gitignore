@@ -1,0 +1,12 @@
+# Environment variables (contains secrets)
+.env
+.streamlit/secrets.toml
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# macOS
+.DS_Store

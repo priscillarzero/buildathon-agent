@@ -1,0 +1,88 @@
+asset,description,name,value,units,bacnet_id,priority,Min,Max,Comments
+AHUAZ-1,Outside Air Flow,OA-CFM,12642,cfm,Qualcomm-AZ:NAEAZ-01/FCB-2.AHUAZ-1.OA-CFM,1,0,14538.3,OA flow sanity: 0–14538 cfm (~+15% over higher of OA-CFM and OACFM-SET). Update when design known.
+AHUAZ-1,Outside Air CFM Setpoint,OACFM-SET,9200,cfm,Qualcomm-AZ:NAEAZ-01/FCB-2.AHUAZ-1.OACFM-SET,1,0,10580,OA setpoint sanity: 0–10580 cfm (~+15% over setpoint 9200).
+R-Zero,RZ calculated occupancy (Auditorium),auditorium occupancy,,persons,,1,0,1500,
+VAVAZ01-10,Flow,SA-F,1033,cfm,Qualcomm-AZ:NAEAZ-01/FCB-2.VAVAZ01-10.SA-F,2,0,5250,Actual flow sanity: 0–5250 cfm (~+25% over design setpoint 4200).
+VAVAZ01-10,Flow Setpoint,SAFLOW-SET,4200,cfm,Qualcomm-AZ:NAEAZ-01/FCB-2.VAVAZ01-10.SAFLOW-SET,2,0,5040,Setpoint should reset when occupancy = 0 | Setpoint sanity: 0–5040 cfm (~+20% over design setpoint 4200).
+VAVAZ01-11,Flow,SA-F,997,cfm,Qualcomm-AZ:NAEAZ-01/FCB-2.VAVAZ01-11.SA-F,2,0,5250,Actual flow sanity: 0–5250 cfm (~+25% over design setpoint 4200).
+VAVAZ01-11,Flow Setpoint,SAFLOW-SET,4200,cfm,Qualcomm-AZ:NAEAZ-01/FCB-2.VAVAZ01-11.SAFLOW-SET,2,0,5040,Setpoint should reset when occupancy = 0 | Setpoint sanity: 0–5040 cfm (~+20% over design setpoint 4200).
+VAVAZ01-12,Flow,SA-F,114,cfm,Qualcomm-AZ:NAEAZ-01/FCB-2.VAVAZ01-12.SA-F,2,0,3886.25,Actual flow sanity: 0–3886 cfm (~+25% over design setpoint 3109).
+VAVAZ01-12,Flow Setpoint,SAFLOW-SET,3109,cfm,Qualcomm-AZ:NAEAZ-01/FCB-2.VAVAZ01-12.SAFLOW-SET,2,0,3730.8,Setpoint should reset when occupancy = 0 | Setpoint sanity: 0–3730 cfm (~+20% over design setpoint 3109).
+VAVAZ01-10,Occupancy Status,OCC-S,Occupied,,Qualcomm-AZ:NAEAZ-01/FCB-2.VAVAZ01-10.OCC-S,2,Occupied,Unoccupied,
+VAVAZ01-11,Occupancy Status,OCC-S,Occupied,,Qualcomm-AZ:NAEAZ-01/FCB-2.VAVAZ01-11.OCC-S,2,Occupied,Unoccupied,
+VAVAZ01-12,Occupancy Status,OCC-S,Occupied,,Qualcomm-AZ:NAEAZ-01/FCB-2.VAVAZ01-12.OCC-S,2,Occupied,Unoccupied,
+AHUAZ-1,Outside Air Temperature,OA-T,67.3,deg F,Qualcomm-AZ:NAEAZ-01/FCB-2.AHUAZ-1.OA-T,2,-20,120,Outside Air Temp: wide sanity window across climate extremes.
+AHUAZ-1,Mixed Air Damper Command,MA-DPR,0,% Cmd,Qualcomm-AZ:NAEAZ-01/FCB-2.AHUAZ-1.MA-DPR,2,0,100,Actuator command. Physical limits are 0–100%.
+AHUAZ-1,Outside Air Damper Command,OA-DPR,0,% Cmd,Qualcomm-AZ:NAEAZ-01/FCB-2.AHUAZ-1.OA-DPR,2,0,100,Actuator command. Physical limits are 0–100%.
+AHUAZ-1,Return Air Flow,RA-CFM,6774,cfm,Qualcomm-AZ:NAEAZ-01/FCB-2.AHUAZ-1.RA-CFM,2,0,39000,"Return flow sanity: 0–39,000 cfm (34,000 design ×1.15) per AH-1 schedule."
+AHUAZ-1,Mixed Air Temperature,MA-T,68.3,deg F,Qualcomm-AZ:NAEAZ-01/FCB-2.AHUAZ-1.MA-T,2,35,95,Mixed Air Temp: typical economizer mixing range.
+AHUAZ-1,Supply Air Temperature,SA-T,56.6,deg F,Qualcomm-AZ:NAEAZ-01/FCB-2.AHUAZ-1.SA-T,2,45,100,Supply Air Temp: 45–65°F in cooling (LAT ~55°F); allow up to ~100°F if heating.
+AHUAZ-1,Return Air Temperature,RA-T,67.2,deg F,Qualcomm-AZ:NAEAZ-01/FCB-2.AHUAZ-1.RA-T,2,55,90,Return Air Temp: typical occupied return range.
+VAVAZ01-10,Heating Valve Command,HTG-VLV,44,% Cmd,Qualcomm-AZ:NAEAZ-01/FCB-2.VAVAZ01-10.HTG-VLV,3,0,100,Reheat valve command: physical 0–100%.
+VAVAZ01-11,Heating Valve Command,HTG-VLV,11,% Cmd,Qualcomm-AZ:NAEAZ-01/FCB-2.VAVAZ01-11.HTG-VLV,3,0,100,Reheat valve command: physical 0–100%.
+VAVAZ01-12,Heating Valve Command,HTG-VLV,0,% Cmd,Qualcomm-AZ:NAEAZ-01/FCB-2.VAVAZ01-12.HTG-VLV,3,0,100,Reheat valve command: physical 0–100%.
+AHUAZ-1,Return Fan Current,RF-AMP,0.6,A,Qualcomm-AZ:NAEAZ-01/FCB-2.AHUAZ-1.RF-AMP,3,0,1.2,Current sanity: 0–1 A (~2× current). Replace with nameplate/FLA when available.
+AHUAZ-1,Return Fan Speed Command,RF-VFD,0,% Cmd,Qualcomm-AZ:NAEAZ-01/FCB-2.AHUAZ-1.RF-VFD,3,0,100,
+AHUAZ-1,Supply Fan Current,SF-AMP,1,A,Qualcomm-AZ:NAEAZ-01/FCB-2.AHUAZ-1.SF-AMP,3,0,2,Current sanity: 0–2 A (~2× current). Replace with nameplate/FLA when available.
+AHUAZ-1,Supply Fan Speed Command,SF-VFD,100,% Cmd,Qualcomm-AZ:NAEAZ-01/FCB-2.AHUAZ-1.SF-VFD,3,0,100,
+VAVAZ01-10,Room CO2,RM-CO2,1973,ppm,Qualcomm-AZ:NAEAZ-01/FCB-2.VAVAZ01-10.RM-CO2,3,200,5000,
+VAVAZ01-11,Room CO2,RM-CO2,1971,ppm,Qualcomm-AZ:NAEAZ-01/FCB-2.VAVAZ01-11.RM-CO2,3,200,5000,
+VAVAZ01-12,Room CO2,RM-CO2,973,ppm,Qualcomm-AZ:NAEAZ-01/FCB-2.VAVAZ01-12.RM-CO2,3,200,5000,
+AHUAZ-1,Outside Air Relative Humidity,OA-RH,84.8,%RH,Qualcomm-AZ:NAEAZ-01/FCB-2.AHUAZ-1.OA-RH,4,0,100,
+AHUAZ-1,Return Air Relative Humidity,RA-RH,85.9,%RH,Qualcomm-AZ:NAEAZ-01/FCB-2.AHUAZ-1.RA-RH,4,0,100,
+VAVAZ01-10,Supply Air Damper Command,DPR-CMD,100,% Cmd,Qualcomm-AZ:NAEAZ-01/FCB-2.VAVAZ01-10.DPR-CMD,4,0,100,
+VAVAZ01-11,Supply Air Damper Command,DPR-CMD,100,% Cmd,Qualcomm-AZ:NAEAZ-01/FCB-2.VAVAZ01-11.DPR-CMD,4,0,100,
+VAVAZ01-12,Supply Air Damper Command,DPR-CMD,100,% Cmd,Qualcomm-AZ:NAEAZ-01/FCB-2.VAVAZ01-12.DPR-CMD,4,0,100,
+WEATHAZ-SYS,Outside Air Rain,OA-RAIN,No,,Qualcomm-AZ:NAEAZ-01/FCB-1.WEATHAZ-SYS.OA-RAIN,4,No,Yes,
+AHUAZ-1,Return Fan Status,RF-S,On,,Qualcomm-AZ:NAEAZ-01/FCB-2.AHUAZ-1.RF-S,4,Off,On,
+VAVAZ01-11,Occupancy Command,OCC-C,Occupied,,Qualcomm-AZ:NAEAZ-01/FCB-2.VAVAZ01-11.OCC-C,4,Unoccupied,Occupied,
+VAVAZ01-12,Occupancy Command,OCC-C,Occupied,,Qualcomm-AZ:NAEAZ-01/FCB-2.VAVAZ01-12.OCC-C,4,Unoccupied,Occupied,
+AHUAZ-1,Outside Air Dew Point,OA-DWP,44.5,deg F,Qualcomm-AZ:NAEAZ-01/FCB-2.AHUAZ-1.OA-DWP,4,-20,75,Outside Air Dew Point: –20–75 °F outdoor sanity window.
+AHUAZ-1,Outside Air Enthalpy,OA-ENTH,24.09,Btu/lb,Qualcomm-AZ:NAEAZ-01/FCB-2.AHUAZ-1.OA-ENTH,4,0,45,Outside Air Enthalpy: 0–45 Btu/lb captures humid extremes.
+AHUAZ-1,Return Air Dew Point,RA-DWP,44.1,deg F,Qualcomm-AZ:NAEAZ-01/FCB-2.AHUAZ-1.RA-DWP,4,35,65,Return Air Dew Point: 35–65 °F typical indoor range.
+AHUAZ-1,Return Air Enthalpy,RA-ENTH,23.97,Btu/lb,Qualcomm-AZ:NAEAZ-01/FCB-2.AHUAZ-1.RA-ENTH,4,5,35,Return Air Enthalpy: 5–35 Btu/lb typical indoor conditions.
+AHUAZ-1,Return Air CFM Setpoint,RACFM-SET,6227,cfm,Qualcomm-AZ:NAEAZ-01/FCB-2.AHUAZ-1.RACFM-SET,4,0,39000,"Return Air CFM Setpoint: 0–39,000 cfm (AH-1 design 34,000 ×1.15)."
+AHUAZ-1,Return Fan Start/Stop,RF-SS,Start,,Qualcomm-AZ:NAEAZ-01/FCB-2.AHUAZ-1.RF-SS,4,0,1,Return Fan Start/Stop: binary 0/1.
+AHUAZ-1,Supply Air Flow,SA-CFM,6248,cfm,Qualcomm-AZ:NAEAZ-01/FCB-2.AHUAZ-1.SA-CFM,4,0,39000,"Supply Air Flow: 0–39,000 cfm (34,000 ×1.15) per AH-1 schedule."
+AHUAZ-1,Supply Air Static Pressure,SA-SP,0.01,in wc,Qualcomm-AZ:NAEAZ-01/FCB-2.AHUAZ-1.SA-SP,4,0,5,Supply Air Static Pressure: 0–5 in.wg; typical control ~2–3 in.wg.
+AHUAZ-1,Supply Air Cooling Setpoint,SACLG-SET,55,deg F,Qualcomm-AZ:NAEAZ-01/FCB-2.AHUAZ-1.SACLG-SET,4,68,78,Zone Cooling Setpoint: 68–78 °F typical comfort band.
+AHUAZ-1,Supply Air Heating Setpoint,SAHTG-SET,52,deg F,Qualcomm-AZ:NAEAZ-01/FCB-2.AHUAZ-1.SAHTG-SET,4,60,72,Zone Heating Setpoint: 60–72 °F typical comfort band.
+AHUAZ-1,Supply Air Static Pressure,SASP-SET,1.8,in wc,Qualcomm-AZ:NAEAZ-01/FCB-2.AHUAZ-1.SASP-SET,4,0.5,4,Supply Air Static Pressure Setpoint: 0.5–4.0 in.wg typical control band.
+AHUAZ1-RFCOM,TSP,Fanwall Stat Press,0.21,,Qualcomm-AZ:NAEAZ-01/FCB-2.AHUAZ1-RFCOM.AV-2,4,0,10,Fanwall Static Pressure: 0–10 in.wg (system design ~7.5 in.wg).
+AHUAZ1-RFCOM,Total CFM,Total CFM,5987,cfm,Qualcomm-AZ:NAEAZ-01/FCB-2.AHUAZ1-RFCOM.AV-1,4,0,39000,"Total CFM: cap at 39,000 cfm (AH-1 design ×1.15)."
+AHUAZ1-RFCOM,kWh,Total kWh,212,kWh,Qualcomm-AZ:NAEAZ-01/FCB-2.AHUAZ1-RFCOM.AV-4,4,0,10000000,"Cumulative energy counter: non-negative & monotonically increasing; use rate-of-change checks instead of fixed max. | Cumulative energy counter: 0–10,000,000 kWh cap; also validate monotonic increase and rate-of-change."
+CHWAZ-SYS,Heating Hot Water South Supply Temp,HHWSS-T,138.6,deg F,Qualcomm-AZ:NAEAZ-01/FCB-1.CHWAZ-SYS.HHWSS-T,4,140,200,Heating Hot Water Supply Temp: 140–200 °F typical.
+CHWAZ-SYS,Heating Hot Water South Return Temp,HHWSR-T,137,deg F,Qualcomm-AZ:NAEAZ-01/FCB-1.CHWAZ-SYS.HHWSR-T,4,100,180,Heating Hot Water Return Temp: 100–180 °F typical.
+CHWAZ-SYS,Heating Hot Water South Flow Rate,HHWS-GPM,110.3,gpm,Qualcomm-AZ:NAEAZ-01/FCB-1.CHWAZ-SYS.HHWS-GPM,4,0,165.45,Flow sanity: 0–165 gpm (~+50% over current). Replace with design when available.
+CHWSAZ-BTU,Chilled Water South Flow Rate,CHWS-GPM,16.1,gpm,Qualcomm-AZ:NAEAZ-01/FCB-2.CHWSAZ-BTU.CHWS-GPM,4,0,24.15,Flow sanity: 0–24 gpm (~+50% over current). Replace with design when available.
+CHWSAZ-BTU,Chilled Water South Return Temp,CHWSR-T,64.3,deg F,Qualcomm-AZ:NAEAZ-01/FCB-2.CHWSAZ-BTU.CHWSR-T,4,48,65,Chilled Water Return Temp: 48–65 °F typical return.
+CHWSAZ-BTU,Chilled Water South Supply Temp,CHWSS-T,48.1,deg F,Qualcomm-AZ:NAEAZ-01/FCB-2.CHWSAZ-BTU.CHWSS-T,4,38,48,Chilled Water Supply Temp: 38–48 °F typical plant supply.
+CO2AZ-1,VAV1-10 Room CO2,CO21-10,1973,ppm,Qualcomm-AZ:NAEAZ-01/FCB-2.CO2AZ-1.CO21-10,4,350,2000,CO2 sensor: 350–2000 ppm typical occupied range; flags sensor faults/units issues.
+CO2AZ-1,VAV1-11 Room CO2,CO21-11,1971,ppm,Qualcomm-AZ:NAEAZ-01/FCB-2.CO2AZ-1.CO21-11,4,350,2000,CO2 sensor: 350–2000 ppm typical occupied range; flags sensor faults/units issues.
+CO2AZ-1,VAV1-12 Room CO2,CO21-12,973,ppm,Qualcomm-AZ:NAEAZ-01/FCB-2.CO2AZ-1.CO21-12,4,350,2000,CO2 sensor: 350–2000 ppm typical occupied range; flags sensor faults/units issues.
+VAVAZ01-10,Actual Cooling Setpoint,EFFCLG-SET,70,deg F,Qualcomm-AZ:NAEAZ-01/FCB-2.VAVAZ01-10.EFFCLG-SET,4,68,78,Zone Cooling Setpoint: 65–85 °F typical comfort band.
+VAVAZ01-10,Actual Heating Setpoint,EFFHTG-SET,68,deg F,Qualcomm-AZ:NAEAZ-01/FCB-2.VAVAZ01-10.EFFHTG-SET,4,60,72,Zone Heating Setpoint: 60–75 °F typical comfort band.
+VAVAZ01-10,Occupancy Command,OCC-C,Occupied,,Qualcomm-AZ:NAEAZ-01/FCB-2.VAVAZ01-10.OCC-C,4,0,1,"Occupancy Command: binary 0=Unoccupied, 1=Occupied."
+VAVAZ01-10,Room Temperature,RM-T,67.9,deg F,Qualcomm-AZ:NAEAZ-01/FCB-2.VAVAZ01-10.RM-T,4,60,85,Room/Zone Temperature: 60–85 °F typical occupied range.
+VAVAZ01-10,Room Temperature Setpoint,RMT-SET,68,deg F,Qualcomm-AZ:NAEAZ-01/FCB-2.VAVAZ01-10.RMT-SET,4,68,76,Room Temp Setpoint: 68–76 °F comfort band.
+VAVAZ01-10,Supply Air Temperature,SA-T,67.4,deg F,Qualcomm-AZ:NAEAZ-01/FCB-2.VAVAZ01-10.SA-T,4,45,100,Supply Air Temperature: 45–65 °F cooling; up to 100 °F heating.
+VAVAZ01-11,Actual Cooling Setpoint,EFFCLG-SET,69.4,deg F,Qualcomm-AZ:NAEAZ-01/FCB-2.VAVAZ01-11.EFFCLG-SET,4,68,78,Zone Cooling Setpoint: 68–78 °F typical comfort band.
+VAVAZ01-11,Actual Heating Setpoint,EFFHTG-SET,67.4,deg F,Qualcomm-AZ:NAEAZ-01/FCB-2.VAVAZ01-11.EFFHTG-SET,4,60,72,Zone Heating Setpoint: 60–72 °F typical comfort band.
+VAVAZ01-11,Room Temperature,RM-T,67.3,deg F,Qualcomm-AZ:NAEAZ-01/FCB-2.VAVAZ01-11.RM-T,4,60,85,Room/Zone Temperature: 60–85 °F typical occupied range.
+VAVAZ01-11,Room Temperature Setpoint,RMT-SET,68,deg F,Qualcomm-AZ:NAEAZ-01/FCB-2.VAVAZ01-11.RMT-SET,4,68,76,Room Temp Setpoint: 68–76 °F comfort band.
+VAVAZ01-11,Supply Air Temperature,SA-T,78,deg F,Qualcomm-AZ:NAEAZ-01/FCB-2.VAVAZ01-11.SA-T,4,45,100,Supply Air Temperature: 45–65 °F cooling; up to 100 °F heating.
+VAVAZ01-12,Actual Cooling Setpoint,EFFCLG-SET,70,deg F,Qualcomm-AZ:NAEAZ-01/FCB-2.VAVAZ01-12.EFFCLG-SET,4,68,78,Zone Cooling Setpoint: 68–78 °F typical comfort band.
+VAVAZ01-12,Actual Heating Setpoint,EFFHTG-SET,68,deg F,Qualcomm-AZ:NAEAZ-01/FCB-2.VAVAZ01-12.EFFHTG-SET,4,60,72,Zone Heating Setpoint: 60–72 °F typical comfort band.
+VAVAZ01-12,Room Temperature,RM-T,67.9,deg F,Qualcomm-AZ:NAEAZ-01/FCB-2.VAVAZ01-12.RM-T,4,60,85,Room/Zone Temperature: 60–85 °F typical occupied range.
+VAVAZ01-12,Room Temperature Setpoint,RMT-SET,68,deg F,Qualcomm-AZ:NAEAZ-01/FCB-2.VAVAZ01-12.RMT-SET,4,68,76,Room Temp Setpoint: 68–76 °F comfort band.
+VAVAZ01-12,Supply Air Temperature,SA-T,77.2,deg F,Qualcomm-AZ:NAEAZ-01/FCB-2.VAVAZ01-12.SA-T,4,45,100,Supply Air Temperature: 45–65 °F cooling; up to 100 °F heating.
+WEATHAZ-SYS,Outside Air Temperature,OA-T,69.4,deg F,Qualcomm-AZ:NAEAZ-01/FCB-1.WEATHAZ-SYS.OA-T,4,-20,120,Outside Air Temperature: –20–120 °F wide sanity window.
+WEATHAZ-SYS,Outside Air Dew Point,OA-DWP,55.8,deg F,Qualcomm-AZ:NAEAZ-01/FCB-1.WEATHAZ-SYS.OA-DWP,4,-20,75,Outside Air Dew Point: –20–75 °F outdoor sanity window.
+WEATHAZ-SYS,Outside Air CO2,OA-CO2,459,ppm,Qualcomm-AZ:NAEAZ-01/FCB-1.WEATHAZ-SYS.OA-CO2,4,350,600,Outside Air CO2: 350–600 ppm typical outdoors.
+WEATHAZ-SYS,Wind Direction,WIND-DIR,283,deg angular,Qualcomm-AZ:NAEAZ-01/FCB-1.WEATHAZ-SYS.WIND-DIR,4,0,360,Wind Direction: 0–360 degrees.
+WEATHAZ-SYS,Wind Speed,WIND-SPD,1.3,mph,Qualcomm-AZ:NAEAZ-01/FCB-1.WEATHAZ-SYS.WIND-SPD,4,0,100,Wind Speed: 0–100 mph sanity limit.
+AHUAZ-1,AHU Handler State,AHU-STATE,1,state,Qualcomm-AZ:NAEAZ-01/FCB-2.AHUAZ-1.AHU-STATE,1,1,10,AHU State: 1=Satisfied 2=Econ 3=Econ+Mech 4=HX Cool+Mech 5=HX Heat 6=HX Heat+Preheat 7=HX Heat+Preheat+Reheat 8=Cooling Idle 9=Heating Idle 10=Temperature Unreliable
+AHUAZ-1,SOO OA CFM Expected,CFM-EXP,,cfm,AHUAZ-1.SOO-OA.CFM-EXP,1,0,14538.3,Calculated during operating hours only: (7.5×occupancy) + (0.06×11835) + 2353 CFM. 2353 CFM constant accounts for other spaces served by same OA damper. DCV not active outside business hours. Virtual metric.
+AHUAZ-1,SOO OA CFM Delta,CFM-DELTA,,cfm,AHUAZ-1.SOO-OA.CFM-DELTA,2,-14538.3,14538.3,Calculated: Actual OA - Expected OA. Positive = over-ventilating negative = under-ventilating. Virtual metric.
+AHUAZ-1,SOO OA Deviation %,DEV-PCT,,%,AHUAZ-1.SOO-OA.DEV-PCT,1,-100,100,Calculated: (Delta / Expected) * 100. Deviation percentage from expected OA. Virtual metric.
+AHUAZ-1,SOO OA State,STATE,,state,AHUAZ-1.SOO-OA.STATE,1,,,Calculated: within_tolerance | over_minor/warning/critical | under_minor/warning/critical | economizer_mode | invalid. Virtual metric.
